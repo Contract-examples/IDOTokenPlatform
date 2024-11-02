@@ -35,8 +35,6 @@ contract IDOTokenPlatformTest is Test {
         idoPlatform = new IDOTokenPlatform();
         testToken = new TestToken();
 
-        // approve IDO platform to transfer tokens
-        testToken.approve(address(idoPlatform), type(uint256).max);
         vm.stopPrank();
     }
 
