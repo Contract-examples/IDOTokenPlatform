@@ -4,10 +4,11 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@solady/utils/SafeTransferLib.sol";
 
-contract IDOTokenPlatform is ReentrancyGuard, Ownable {
+contract IDOTokenPlatform is ReentrancyGuard, Ownable, Pausable {
     // Custom Errors
     error InvalidTokenAddress();
     error InvalidTokenPrice();
@@ -132,7 +133,7 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
     }
 
     // claim tokens
-    function claimTokens(uint256 _idoId) external nonReentrant {
+    function claimTokens(uint256 _idoId) external nonReentrant whenNotPaused {
         IDOInfo storage ido = idoInfo[_idoId];
         UserInfo storage user = userInfo[_idoId][msg.sender];
         if (!ido.exists) revert IDONotExist();
@@ -159,7 +160,7 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
     }
 
     // refound only if min goal is not reached
-    function claimRefund(uint256 _idoId) external nonReentrant {
+    function claimRefund(uint256 _idoId) external nonReentrant whenNotPaused {
         IDOInfo storage ido = idoInfo[_idoId];
         UserInfo storage user = userInfo[_idoId][msg.sender];
 
@@ -249,5 +250,15 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
     function getUserInfo(uint256 _idoId, address _user) external view returns (uint256 contribution, bool claimed) {
         UserInfo memory user = userInfo[_idoId][_user];
         return (user.contribution, user.claimed);
+    }
+
+    // pause
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    // unpause
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }
