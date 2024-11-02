@@ -43,7 +43,7 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
         uint256 startTime; // start time
         uint256 endTime; // end time
         uint256 totalRaised; // total raised (in wei)
-        uint8 decimals;
+        uint8 decimals; // token decimals
         bool claimed; // project owner claimed or not
         bool exists; // IDO exists or not
     }
@@ -83,14 +83,16 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
         if (_maxCap < _minGoal) revert MaxCapTooLow();
         if (_duration == 0) revert InvalidDuration();
 
+        // check if the platform has enough tokens
         uint256 requiredTokens = (_maxCap * (10 ** _tokenDecimals)) / _tokenPrice;
-
         if (IERC20(_token).balanceOf(address(this)) < requiredTokens) {
             revert InsufficientTokenBalance();
         }
 
+        // increment current IDO ID
         currentIDOId++;
 
+        // create IDO info
         idoInfo[currentIDOId] = IDOInfo({
             token: IERC20(_token),
             tokenPrice: _tokenPrice,
@@ -104,6 +106,7 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
             exists: true
         });
 
+        // emit IDO created event
         emit IDOCreated(currentIDOId, _token, _tokenPrice, _minGoal, _maxCap);
     }
 
@@ -111,13 +114,20 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
     function contribute(uint256 _idoId) external payable nonReentrant {
         IDOInfo storage ido = idoInfo[_idoId];
         if (!ido.exists) revert IDONotExist();
+
+        // check if the IDO has started
         if (block.timestamp < ido.startTime) revert IDONotStarted();
+        // check if the IDO has ended
         if (block.timestamp > ido.endTime) revert IDOEnded();
+        // check if the total raised exceeds the max cap
         if (ido.totalRaised + msg.value > ido.maxCap) revert ExceedsMaxCap();
 
+        // update user contribution
         userInfo[_idoId][msg.sender].contribution += msg.value;
+        // update total raised
         ido.totalRaised += msg.value;
 
+        // emit contributed event
         emit Contributed(_idoId, msg.sender, msg.value);
     }
 
@@ -125,19 +135,26 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
     function claimTokens(uint256 _idoId) external nonReentrant {
         IDOInfo storage ido = idoInfo[_idoId];
         UserInfo storage user = userInfo[_idoId][msg.sender];
-
         if (!ido.exists) revert IDONotExist();
+
+        // check if the IDO has ended
         if (block.timestamp <= ido.endTime) revert IDONotEnded();
+        // check if the min goal is reached
         if (ido.totalRaised < ido.minGoal) revert MinGoalNotReached();
+        // check if the user has claimed
         if (user.claimed) revert AlreadyClaimed();
+        // check if the user has contributed
         if (user.contribution == 0) revert NoContribution();
 
+        // calculate token amount
         uint256 tokenAmount = (user.contribution * (10 ** ido.decimals)) / ido.tokenPrice;
-
+        // transfer tokens to user
         SafeTransferLib.safeTransfer(address(ido.token), msg.sender, tokenAmount);
 
+        // mark user as claimed
         user.claimed = true;
 
+        // emit tokens claimed event
         emit TokensClaimed(_idoId, msg.sender, tokenAmount);
     }
 
@@ -147,18 +164,27 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
         UserInfo storage user = userInfo[_idoId][msg.sender];
 
         if (!ido.exists) revert IDONotExist();
+
+        // check if the IDO has ended
         if (block.timestamp <= ido.endTime) revert IDONotEnded();
+        // check if the min goal is reached
         if (ido.totalRaised >= ido.minGoal) revert MinGoalReached();
+        // check if the user has claimed
         if (user.claimed) revert AlreadyClaimed();
+        // check if the user has contributed
         if (user.contribution == 0) revert NoContribution();
 
+        // calculate refund amount
         uint256 refundAmount = user.contribution;
 
+        // transfer ETH to user
         (bool success,) = payable(msg.sender).call{ value: refundAmount }("");
         if (!success) revert TransferFailed();
 
+        // mark user as claimed
         user.claimed = true;
 
+        // emit refund claimed event
         emit RefundClaimed(_idoId, msg.sender, refundAmount);
     }
 
@@ -167,17 +193,25 @@ contract IDOTokenPlatform is ReentrancyGuard, Ownable {
         IDOInfo storage ido = idoInfo[_idoId];
 
         if (!ido.exists) revert IDONotExist();
+
+        // check if the IDO has ended
         if (block.timestamp <= ido.endTime) revert IDONotEnded();
+        // check if the min goal is reached
         if (ido.totalRaised < ido.minGoal) revert MinGoalNotReached();
+        // check if the project owner has claimed
         if (ido.claimed) revert AlreadyClaimed();
 
+        // calculate amount to transfer
         uint256 amountToTransfer = ido.totalRaised;
 
+        // transfer ETH to project owner
         (bool success,) = payable(owner()).call{ value: amountToTransfer }("");
         if (!success) revert TransferFailed();
 
+        // mark IDO as claimed
         ido.claimed = true;
 
+        // emit funds claimed event
         emit FundsClaimed(_idoId, owner(), amountToTransfer);
     }
 
